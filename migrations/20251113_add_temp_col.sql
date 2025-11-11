@@ -1,0 +1,1 @@
+ALTER TABLE public.divination_records ADD COLUMN IF NOT EXISTS temp_col_for_cache_bust text;

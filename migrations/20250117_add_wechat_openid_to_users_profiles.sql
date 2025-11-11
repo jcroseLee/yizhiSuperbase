@@ -1,0 +1,4 @@
+-- This migration is redundant with 20250116_add_wechat_openid.sql
+-- Keeping it for migration history, but the column is already added
+-- No operation needed as IF NOT EXISTS handles duplicates safely
+-- ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS wechat_openid TEXT;

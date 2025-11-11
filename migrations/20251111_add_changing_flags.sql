@@ -1,0 +1,1 @@
+ALTER TABLE public.divination_records ADD COLUMN IF NOT EXISTS changing_flags text;

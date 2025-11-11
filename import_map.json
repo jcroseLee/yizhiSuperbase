@@ -1,0 +1,6 @@
+{
+  "imports": {
+    "@supabase/supabase-js": "jsr:@supabase/supabase-js@^2.43.4",
+    "shared/": "./functions/_shared/"
+  }
+}

@@ -1,0 +1,1 @@
+COMMENT ON COLUMN public.divination_records.divination_time IS 'The time of divination.';
