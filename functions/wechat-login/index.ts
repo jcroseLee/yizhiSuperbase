@@ -136,31 +136,106 @@ Deno.serve(async (req: any) => {
     // Helper function to sync profile to profiles table
     const syncProfileToTable = async (userId: string, nickname: string | null, avatarUrl: string | null, wechatOpenId?: string, wechatUnionId?: string | null) => {
       console.log('Syncing profile to profiles table:', { userId, nickname, avatarUrl, wechatOpenId, wechatUnionId });
-      
+
       // Get current user data to sync unionid if not provided
       let unionIdToSync = wechatUnionId;
       if (!unionIdToSync && data?.user) {
         unionIdToSync = data.user.user_metadata?.wechat_unionid || null;
       }
-      
-      const profileData: any = {
-        id: userId,
+
+      const profileDataBase: any = {
         nickname: nickname || null,
         avatar_url: avatarUrl || null,
       };
-      if (wechatOpenId) {
-        profileData.wechat_openid = wechatOpenId;
-      }
+
       if (unionIdToSync !== undefined && unionIdToSync !== null) {
-        profileData.wechat_unionid = unionIdToSync;
+        profileDataBase.wechat_unionid = unionIdToSync;
       }
-      
+
+      // When we have an openid, we should update the existing row (if any) instead of inserting a new one.
+      if (wechatOpenId) {
+        let existingProfileByOpenId: any = null;
+        let existingProfileError: any = null;
+        try {
+          const existingResult = await supabaseAdmin
+            .from('profiles')
+            .select('id')
+            .eq('wechat_openid', wechatOpenId)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          existingProfileByOpenId = existingResult.data;
+          existingProfileError = existingResult.error;
+        } catch (lookupError) {
+          console.warn('Lookup by wechat_openid threw:', lookupError);
+        }
+
+        if (existingProfileError && existingProfileError.code !== 'PGRST116') {
+          console.warn('Failed to fetch existing profile by openid during sync:', existingProfileError);
+        }
+
+        const profileData: any = {
+          ...profileDataBase,
+          wechat_openid: wechatOpenId,
+        };
+
+        // If we already have a profile row for this openid, update it in place.
+        if (existingProfileByOpenId?.id) {
+          console.log('Updating existing profile row by openid:', {
+            openid: wechatOpenId,
+            existingId: existingProfileByOpenId.id,
+            incomingUserId: userId,
+          });
+
+          const { error: updateError } = await supabaseAdmin
+            .from('profiles')
+            .update({
+              ...profileData,
+              // Preserve the existing id to avoid switching primary keys.
+              id: existingProfileByOpenId.id,
+            })
+            .eq('wechat_openid', wechatOpenId);
+
+          if (updateError) {
+            console.error('Failed to update existing profile by openid:', updateError);
+          } else {
+            console.log('Successfully updated profile using openid conflict.');
+          }
+          return;
+        }
+
+        // No existing row with this openid, fall back to inserting/upserting by id.
+        const insertData = {
+          id: userId,
+          ...profileData,
+        };
+
+        const { error: insertError } = await supabaseAdmin
+          .from('profiles')
+          .upsert(insertData, {
+            onConflict: 'id',
+          });
+
+        if (insertError) {
+          console.error('Failed to insert profile when no existing openid row was found:', insertError);
+        } else {
+          console.log('Successfully inserted profile with new openid.');
+        }
+        return;
+      }
+
+      // Fallback: no openid provided, rely on upsert by id.
+      const fallbackData = {
+        id: userId,
+        ...profileDataBase,
+      };
+
       const { error: profileError } = await supabaseAdmin
         .from('profiles')
-        .upsert(profileData, {
+        .upsert(fallbackData, {
           onConflict: 'id'
         });
-      
+
       if (profileError) {
         console.error('Failed to sync profile to profiles table:', profileError);
         // Don't throw, just log the error
