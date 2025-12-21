@@ -32,7 +32,7 @@ Deno.serve(async (req: Request) => {
     const { data: readyForSettlement, error: settlementError } = await supabase
       .from('consultations')
       .select(
-        'id, master_id, user_id, price, platform_fee_amount, master_payout_amount, settlement_status, settlement_scheduled_at, masters(user_id, name)'
+        'id, master_id, user_id, price, master_payout_amount, settlement_status, settlement_scheduled_at, masters(user_id, name)'
       )
       .eq('status', 'pending_settlement')
       .eq('settlement_status', 'pending')
@@ -50,7 +50,6 @@ Deno.serve(async (req: Request) => {
     for (const consultation of readyForSettlement ?? []) {
       try {
         const price = Number(consultation.price ?? 0)
-        const platformFee = Number(consultation.platform_fee_amount ?? 0)
         const payoutAmount = Number(consultation.master_payout_amount ?? 0)
 
         if (price <= 0) {
@@ -107,7 +106,7 @@ Deno.serve(async (req: Request) => {
             p_amount: payoutAmount,
             p_direction: 'credit',
             p_consultation_id: consultation.id,
-            p_description: `咨询订单结算：${consultation.masters?.name || '卦师'}，订单金额¥${price.toFixed(2)}，平台服务费¥${platformFee.toFixed(2)}，实际结算¥${payoutAmount.toFixed(2)}`,
+            p_description: `咨询订单结算：${consultation.masters?.name || '卦师'}，订单金额¥${price.toFixed(2)}，实际结算¥${payoutAmount.toFixed(2)}`,
           })
 
           if (walletError) {
@@ -123,7 +122,7 @@ Deno.serve(async (req: Request) => {
             sender_id: masterUserId,
             receiver_id: masterUserId,
             consultation_id: consultation.id,
-            content: `订单结算完成：订单金额¥${price.toFixed(2)}，平台服务费¥${platformFee.toFixed(2)}，已结算¥${payoutAmount.toFixed(2)}至您的账户。`,
+            content: `订单结算完成：订单金额¥${price.toFixed(2)}，已结算¥${payoutAmount.toFixed(2)}至您的账户。`,
             message_type: 'system',
             metadata: {
               event: 'settlement_completed',
@@ -148,7 +147,6 @@ Deno.serve(async (req: Request) => {
         processed.push({
           id: consultation.id,
           payout_amount: payoutAmount,
-          platform_fee: platformFee,
         })
       } catch (error: any) {
         console.error('Failed to process settlement', consultation.id, error)

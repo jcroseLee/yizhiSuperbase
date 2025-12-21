@@ -71,7 +71,6 @@ SELECT w, s, c FROM (
     ('私下交易','block','外联'),
     ('平台外支付','block','外联'),
     ('带单','warn','广告'),
-    ('付费咨询','warn','广告'),
     ('外部群','warn','外联')
 ) AS seed(w,s,c)
 WHERE NOT EXISTS (
@@ -193,8 +192,9 @@ ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
 
 DO $$
 BEGIN
-  -- Drop existing select policy to replace
+  -- Drop existing select policies to replace
   DROP POLICY IF EXISTS "posts_select_all" ON public.posts;
+  DROP POLICY IF EXISTS "posts_select_visible" ON public.posts;
   -- Create visibility policy
   CREATE POLICY "posts_select_visible"
     ON public.posts FOR SELECT

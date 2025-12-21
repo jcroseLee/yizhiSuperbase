@@ -30,7 +30,6 @@ function buildDefaultKeywords() {
     { word: '私下交易', severity: 'block', category: '外联' },
     { word: '平台外支付', severity: 'block', category: '外联' },
     { word: '带单', severity: 'warn', category: '广告' },
-    { word: '付费咨询', severity: 'warn', category: '广告' },
     { word: '外部群', severity: 'warn', category: '外联' },
   ]
 }

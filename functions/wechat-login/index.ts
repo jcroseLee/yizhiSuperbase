@@ -63,6 +63,59 @@ async function getWechatSession(code) {
   return data; // { openid, session_key, unionid }
 }
 
+// 生成随机昵称
+function generateRandomNickname(): string {
+  const adjectives = ['神秘', '智慧', '优雅', '灵动', '沉稳', '飘逸', '清雅', '深邃', '温润', '刚毅', '柔美', '豪迈', '淡泊', '超然', '宁静', '悠然', '洒脱', '内敛', '豁达', '睿智'];
+  const nouns = ['行者', '隐士', '学者', '墨客', '雅士', '游侠', '居士', '道人', '书生', '剑客', '琴师', '画师', '诗人', '旅人', '观者', '思者', '悟者', '修者', '行者', '智者'];
+  const numbers = Math.floor(Math.random() * 9999) + 1;
+  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const noun = nouns[Math.floor(Math.random() * nouns.length)];
+  return `${adj}${noun}${numbers}`;
+}
+
+// 生成随机头像URL
+function generateRandomAvatar(seed?: string): string {
+  const avatarSeed = seed || `6yao-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  return `https://picsum.photos/seed/${avatarSeed}/160`;
+}
+
+// 检查昵称是否已存在
+async function checkNicknameExists(supabaseAdmin: any, nickname: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('nickname', nickname)
+      .maybeSingle();
+    
+    if (error && error.code !== 'PGRST116') {
+      console.warn('Error checking nickname existence:', error);
+      return false; // 如果查询出错，假设不存在，允许使用
+    }
+    
+    return !!data;
+  } catch (error) {
+    console.warn('Exception checking nickname existence:', error);
+    return false;
+  }
+}
+
+// 生成唯一的随机昵称
+async function generateUniqueNickname(supabaseAdmin: any, maxAttempts: number = 10): Promise<string> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const nickname = generateRandomNickname();
+    const exists = await checkNicknameExists(supabaseAdmin, nickname);
+    if (!exists) {
+      return nickname;
+    }
+    console.log(`Nickname "${nickname}" already exists, trying again...`);
+  }
+  // 如果所有尝试都失败，添加时间戳确保唯一性
+  const fallbackNickname = generateRandomNickname() + '-' + Date.now();
+  console.log(`Using fallback nickname with timestamp: ${fallbackNickname}`);
+  return fallbackNickname;
+}
+
 Deno.serve(async (req: any) => {
   console.log('wechat-login function invoked.');
   // This is needed if you're planning to invoke your function from a browser.
@@ -143,9 +196,11 @@ Deno.serve(async (req: any) => {
         unionIdToSync = data.user.user_metadata?.wechat_unionid || null;
       }
 
+      // If nickname or avatarUrl is empty, we'll let the database function set defaults
+      // We'll use null to indicate "use default" and let ensure_default_profile_fields handle it
       const profileDataBase: any = {
-        nickname: nickname || null,
-        avatar_url: avatarUrl || null,
+        nickname: (nickname && nickname.trim() !== '') ? nickname : null,
+        avatar_url: (avatarUrl && avatarUrl.trim() !== '') ? avatarUrl : null,
       };
 
       if (unionIdToSync !== undefined && unionIdToSync !== null) {
@@ -345,6 +400,24 @@ Deno.serve(async (req: any) => {
       }
     } else {
       console.log('User not found, creating new user.');
+      
+      // 如果没有提供 userInfo 或 userInfo 为空，使用用户提供的值或null
+      // 数据库触发器会自动设置默认昵称和头像
+      let finalNickname = userInfo?.nickname || null;
+      let finalAvatarUrl = userInfo?.avatarUrl || null;
+      
+      // 如果用户没有提供昵称，设置为null，让数据库触发器设置默认昵称
+      if (!finalNickname || finalNickname.trim() === '') {
+        console.log('No nickname provided, will use default nickname from database.');
+        finalNickname = null;
+      }
+      
+      // 如果用户没有提供头像，设置为null，让数据库触发器设置默认头像
+      if (!finalAvatarUrl || finalAvatarUrl.trim() === '') {
+        console.log('No avatar provided, will use default avatar from database.');
+        finalAvatarUrl = null;
+      }
+      
       const { data: signUpData, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
         email: email, // Create with new format
         password,
@@ -352,8 +425,8 @@ Deno.serve(async (req: any) => {
         user_metadata: {
           wechat_openid: openid,
           wechat_unionid: unionid,
-          avatar_url: userInfo?.avatarUrl || null,
-          nickname: userInfo?.nickname || null,
+          avatar_url: finalAvatarUrl,
+          nickname: finalNickname,
         },
       });
 
@@ -502,28 +575,37 @@ Deno.serve(async (req: any) => {
       throw new Error('Failed to retrieve user data after sign-in.');
     }
 
-    if (createdNewUser || !existingProfile || existingProfile.wechat_openid !== openid) {
-      console.log('Syncing profile to ensure openid linkage.');
-      await syncProfileToTable(
-        data.user.id,
-        userInfo?.nickname || data.user.user_metadata?.nickname || ensuredUser?.user_metadata?.nickname || null,
-        userInfo?.avatarUrl || data.user.user_metadata?.avatar_url || ensuredUser?.user_metadata?.avatar_url || null,
-        openid,
-        unionid || data.user.user_metadata?.wechat_unionid || ensuredUser?.user_metadata?.wechat_unionid || null
-      );
+    // 确定最终的昵称和头像
+    // 优先使用用户提供的值，其次使用已有的元数据，最后为null（让数据库设置默认值）
+    let finalNickname = userInfo?.nickname || data.user.user_metadata?.nickname || ensuredUser?.user_metadata?.nickname || null;
+    let finalAvatarUrl = userInfo?.avatarUrl || data.user.user_metadata?.avatar_url || ensuredUser?.user_metadata?.avatar_url || null;
+    
+    // 如果没有昵称，设置为null，让数据库函数设置默认昵称
+    if (!finalNickname || finalNickname.trim() === '') {
+      console.log('No nickname found, will use default nickname from database.');
+      finalNickname = null;
     }
-
-    // Update user metadata if userInfo is provided and user already exists
-    if (data && data.user && userInfo && (userInfo.avatarUrl || userInfo.nickname)) {
-      console.log('Updating user metadata with userInfo.');
-      // Use admin API to update user metadata
+    
+    // 如果没有头像，设置为null，让数据库函数设置默认头像
+    if (!finalAvatarUrl || finalAvatarUrl.trim() === '') {
+      console.log('No avatar found, will use default avatar from database.');
+      finalAvatarUrl = null;
+    }
+    
+    // 如果昵称或头像与现有值不同，或者用户是新创建的，更新用户元数据
+    const needsUpdate = createdNewUser || 
+      (data.user.user_metadata?.nickname !== finalNickname) || 
+      (data.user.user_metadata?.avatar_url !== finalAvatarUrl);
+    
+    if (needsUpdate) {
+      console.log('Updating user metadata with generated or provided values.');
       const { data: updatedUser, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
         data.user.id,
         {
           user_metadata: {
             ...data.user.user_metadata,
-            avatar_url: userInfo.avatarUrl || data.user.user_metadata?.avatar_url,
-            nickname: userInfo.nickname || data.user.user_metadata?.nickname,
+            avatar_url: finalAvatarUrl,
+            nickname: finalNickname,
           },
         }
       );
@@ -533,33 +615,38 @@ Deno.serve(async (req: any) => {
       } else if (updatedUser) {
         // Update the user in response data
         data.user = updatedUser;
-        
-        // Sync profile to profiles table
-        await syncProfileToTable(
-          updatedUser.id,
-          userInfo.nickname || updatedUser.user_metadata?.nickname || null,
-          userInfo.avatarUrl || updatedUser.user_metadata?.avatar_url || null,
-          undefined,
-          unionid || updatedUser.user_metadata?.wechat_unionid || null
-        );
       }
+    }
+    
+    if (createdNewUser || !existingProfile || existingProfile.wechat_openid !== openid) {
+      console.log('Syncing profile to ensure openid linkage.');
+      await syncProfileToTable(
+        data.user.id,
+        finalNickname,
+        finalAvatarUrl,
+        openid,
+        unionid || data.user.user_metadata?.wechat_unionid || ensuredUser?.user_metadata?.wechat_unionid || null
+      );
     } else if (data && data.user && data.user.id) {
-      // Even if no userInfo provided, ensure profile exists in profiles table
-      // This handles the case where user was created before profiles table sync was added
-      const { data: existingProfile } = await supabaseAdmin
+      // Even if profile exists, ensure it has nickname and avatar
+      const { data: existingProfileData } = await supabaseAdmin
         .from('profiles')
-        .select('id')
+        .select('nickname, avatar_url')
         .eq('id', data.user.id)
-        .single();
+        .maybeSingle();
       
-      if (!existingProfile) {
-        console.log('Profile does not exist, creating it.');
+      const needsProfileUpdate = !existingProfileData || 
+        (!existingProfileData.nickname || existingProfileData.nickname.trim() === '') ||
+        (!existingProfileData.avatar_url || existingProfileData.avatar_url.trim() === '');
+      
+      if (needsProfileUpdate) {
+        console.log('Profile missing nickname or avatar, updating it.');
         await syncProfileToTable(
           data.user.id,
-          data.user.user_metadata?.nickname || null,
-          data.user.user_metadata?.avatar_url || null,
+          finalNickname,
+          finalAvatarUrl,
           undefined,
-          unionid || data.user.user_metadata?.wechat_unionid || null
+          unionid || data.user.user_metadata?.wechat_unionid || ensuredUser?.user_metadata?.wechat_unionid || null
         );
       }
     }
@@ -573,6 +660,22 @@ Deno.serve(async (req: any) => {
     if (!data.user) {
       console.error('No user data available after login.');
       throw new Error('Failed to get user data.');
+    }
+    
+    // Update last_login_at and ensure default profile fields
+    try {
+      const { error: loginError } = await supabaseAdmin.rpc('on_user_login', {
+        user_id: data.user.id
+      });
+      if (loginError) {
+        console.warn('Failed to update login info:', loginError);
+        // Don't throw, just log the warning
+      } else {
+        console.log('Successfully updated login info and ensured default profile fields');
+      }
+    } catch (loginErr) {
+      console.warn('Exception updating login info:', loginErr);
+      // Don't throw, just log the warning
     }
     
     console.log('Login successful, returning data.');
