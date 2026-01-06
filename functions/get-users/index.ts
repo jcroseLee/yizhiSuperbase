@@ -112,7 +112,8 @@ Deno.serve(async (req: any) => {
     const usersWithDetails = await Promise.all(
       (profiles || []).map(async (profile) => {
         try {
-          const { data: authUser, error: userError } = await supabaseAdmin.auth.admin.getUserById(profile.id);
+          const { data, error: userError } = await supabaseAdmin.auth.admin.getUserById(profile.id);
+          const authUser = data?.user;
           
           if (userError || !authUser) {
             return {

@@ -1,6 +1,6 @@
 # Update Note Edge Function
 
-这个 Edge Function 用于更新占卜记录的笔记内容。
+这个 Edge Function 用于更新推演记录的笔记内容。
 
 ## 功能说明
 

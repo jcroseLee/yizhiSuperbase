@@ -70,10 +70,10 @@ create trigger update_module_updated_at_trigger
 
 -- Insert default modules
 insert into public.modules (name, display_name, description, is_enabled, order_index) values
-  ('divination', '占卜功能', '六爻占卜核心功能', true, 1),
+  ('divination', '推演功能', '六爻推演核心功能', true, 1),
   ('community', '社区功能', '论坛社区功能', true, 2),
   ('masters', '卦师功能', '卦师展示和预约功能', true, 3),
   ('messages', '消息功能', '用户消息功能', true, 4),
-  ('records', '记录功能', '占卜记录查看功能', true, 5)
+  ('records', '记录功能', '推演记录查看功能', true, 5)
 on conflict (name) do nothing;
 

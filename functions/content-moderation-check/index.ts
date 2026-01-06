@@ -19,7 +19,7 @@ type Decision = 'pass' | 'warn' | 'block'
 
 function buildDefaultKeywords() {
   return [
-    { word: '算命', severity: 'block', category: '迷信' },
+    { word: '命理', severity: 'block', category: '迷信' },
     { word: '改运', severity: 'block', category: '迷信' },
     { word: '神仙', severity: 'block', category: '迷信' },
     { word: '风水宝地', severity: 'block', category: '迷信' },
@@ -30,7 +30,6 @@ function buildDefaultKeywords() {
     { word: '私下交易', severity: 'block', category: '外联' },
     { word: '平台外支付', severity: 'block', category: '外联' },
     { word: '带单', severity: 'warn', category: '广告' },
-    { word: '付费咨询', severity: 'warn', category: '广告' },
     { word: '外部群', severity: 'warn', category: '外联' },
   ]
 }
