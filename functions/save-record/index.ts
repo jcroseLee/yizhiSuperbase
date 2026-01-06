@@ -43,7 +43,7 @@ Deno.serve(async (req: any) => {
       });
     }
 
-    // 检查是否已存在相同的占卜记录（通过 original_key, changed_key, user_id 判断）
+    // 检查是否已存在相同的推演记录（通过 original_key, changed_key, user_id 判断）
     const { data: existingRecord } = await supabase
       .from("divination_records")
       .select("id")
@@ -55,7 +55,7 @@ Deno.serve(async (req: any) => {
     if (existingRecord) {
       // 记录已存在，返回错误提示
       return new Response(JSON.stringify({ 
-        error: "该占卜记录已保存过，不能重复保存",
+        error: "该推演记录已保存过，不能重复保存",
         existingId: existingRecord.id,
         isDuplicate: true
       }), {

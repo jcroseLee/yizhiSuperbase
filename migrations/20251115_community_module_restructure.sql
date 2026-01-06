@@ -60,7 +60,7 @@ END $$;
 INSERT INTO public.sensitive_keywords (word, severity, category)
 SELECT w, s, c FROM (
   VALUES
-    ('算命','block','迷信'),
+    ('命理','block','迷信'),
     ('改运','block','迷信'),
     ('神仙','block','迷信'),
     ('风水宝地','block','迷信'),
